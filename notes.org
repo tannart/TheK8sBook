@@ -1,0 +1,150 @@
+* Terms
+** Orchestrator
+A system that deploys and manages applications, it can deploy applications and dynamically respond to changes for example, kubernetes can:
+ - Deploy your application
+ - Scale it up and  down dynamically based on demand
+ - Self healing
+ - Zero-downtime updates & rollbacks
+** Cloud-native app
+Fulfills criteria such as:
+ - auto-scaling
+ - self-healing
+ - rolling-updates
+ - rollbacks 
+ - etc
+** Container runtime interface
+Abstraction layer that standardizes container interface and allows using different containers
+** Cluster
+The worker nodes and control plane nodes running the application(s)
+** Control Plane
+ - API for interacting with the cluster
+ - Scheduler for assigning work
+ - Persistent store for recording the state of the cluster and apps
+** Nodes
+ - The machines on which the user applications run.
+** Orchestrator
+   A system which manages and deploys applications
+** Manifest
+   A Yaml configuration file describing the desired state of an application.
+** Pod
+   - A wrapper for one or more containers allowing them to be run on a kubernetes cluster.
+   - Pods are *the* atomic unit in kubernetes, when scaling an app you must add more pods rather than more containers.
+   - A single pod can only be scheduled to a single node.
+   - Pods are immutable, any changes require the destruction and replacement of the existing pod.
+   - Pods are said to be unreliable, they will not persist.
+
+** Deployment
+ - A type of controller used for running pods
+ - Offers scalability, self-healing, and rolling updates for stateless apps
+ - Defined in manifests
+ - Enacted by posting to the API server as the _desired state_ of the application.
+** Declarative Model
+  1. Declare the desired state of an application microservice in a manifest
+  2. post to API server
+  3. K8s stores it in the cluster store as the /desired state/
+  4. K8s implements the desired state on the cluster
+  5. A controller ensures the /observed state/ matches the /desired state/
+** Desired state
+   - What an application should look like, as defined by the manifest
+   - Includes images to use, replica numbers, network ports and how to update.
+** Services
+  - Provide reliable networking for a set of pods
+  - Front-end consisting of a stable DNS-name, ip address and port.
+  - Back-end load-balancing traffic across set of pods.
+  - Updates routing as pods are created and destroyed automatically.
+* Technologies
+** containerd
+A stripped down version of the docker runtime with just the features required by kubernetes. The sandard docker runtime was deprecated for use with Kubernetes in 1.20
+** Control Plane
+The central hub of the cluster consisting of one or more control plane nodes
+*** API Server
+  - The centralised mediator for all communiation between all components.
+  - Exposes a rest API that you can POST YAML conf files to.
+*** Cluster Store
+  - The only stateful part of the control plane
+  - Persists the entire configuration and state of the cluster
+  - Currently based on etcd
+*** Controller Manager
+  - Spawns, manages and monitors all independent controllers
+*** Controller
+  - Monitors cluster components and responds to events
+  - Individually responsible for a small subset of cluster intelligence
+**** Controller logic:
+  1. Obtain desired state
+  2. Observe current state
+  3. Determine differences
+  4. Reconcile differences
+*** Scheduler
+  - Watches API server for new work tasks and assigns them to healthy worker nodes.
+  - The scheduler uses a ranking algorithm to choose the most appropriate node to run the task on.
+  - A Task is normally a pod/container.
+*** Cloud Controller Manager
+    Facilitates integrations with cloud services such as instances, load-balancers and storage.
+** Worker Nodes
+*** Tasks
+  1. Watch the API server for new work assignments
+  2. Execute work assignments
+  3. Report back to the control plane (via the API server)
+*** Components
+**** Kubelet
+    - The main kubernetes agent (often node and kubelet are used interchangeably)
+    - Adding node to a cluster installs the kubelet which registers it and the nodes cpu, memory and storages in the nodes cluster pool.
+    - The three tasks above are executed by the kubelet.
+**** Container Runtime
+     - Performs container-related tasks e.g. pulling images, starting/stopping containers, etc.
+**** Kube-proxy
+     - Manages local cluster-networking
+     - Ensures each node gets its own ip address and implements local rules to handle routing and load balancing of traffic on the pod network.
+** Kubernetes DNS
+Internal DNS service to enable service discovery.
+  - The dns service has a static ip hard-coded into every pod on the cluster, ensuring every container and Pod can locate it and use it for discovery.
+  - Cluster DNS is based on the CoreDNS project.
+** 
+* Config
+** kubeconfig file
+ - Usually found in '~/.kube/config'
+   Contains definitions for 3 objects
+*** Clusters
+A list of all the clusters that kubectl knows about
+*** Users
+A list of users and their credentials
+*** Contexts
+Groups of clusters and users under a friendly name.
+
+* Requirements
+There are three features an app must have to be run on a cluster:
+  1. Packaged as a container
+  2. Wrapped in a pod
+  3. Deployed via a declarative manifest file
+* Deployment process 
+  1. Create Manifest
+  2. Post to API server (using kubectl)
+  3. K8s sends it to the identified controller (usually the /deployments controller/)
+  4. K8s records the config in the cluster store as part of the desired state.
+  5. Any required work tasks are scheduled to cluster work nodes.
+  6. Controllers run as background reconciliation loops monitoring the cluster state.
+* Examples
+** kubeconfig file
+  - A single cluster called shield, as single user called charlie, and a single context called director.
+  - The director context combines the charlie user and the shield cluster and is also set as the default context
+    #+begin_src yaml
+      apiVersion: v1
+      kind: Config
+      clusters:
+	- cluster:
+	    certificate-autority: /home/zenobia/.minikube/ca.crt
+	    server: https://192.168.1.77:8443
+	    name: shield
+      users:
+	- name: charlie
+	  user:
+	    client-certificate: /home/zenobia/.minikube/client.crt
+	    client-key: /home/zenobia/.minikube/client.key
+      contexts:
+	- context:
+	    cluster: shield
+	    user: charlie
+	  name: director
+      current-context: director
+    #+end_src
+
