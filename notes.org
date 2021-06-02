@@ -99,7 +99,49 @@ The central hub of the cluster consisting of one or more control plane nodes
 Internal DNS service to enable service discovery.
   - The dns service has a static ip hard-coded into every pod on the cluster, ensuring every container and Pod can locate it and use it for discovery.
   - Cluster DNS is based on the CoreDNS project.
-** 
+** Pods
+ - Pods are almost always deployed via /controllers/
+*** Pod Theory
+    
+    - Pods are the atomic scheduling unit in kubernetes
+    - Pods serve as a wrapper around containers that kubernetes is able to recognise and interact with
+    - Pods are mortal, they must be totally recreated when destroyed
+    - State and data must always be stored outside pod
+    - A pod is just an execution environment shared by one or more containers, essentially just a container containing containers
+    - Each pod gets a single ip shared by all the containers inside
+    - Each pod sits on an internal kubernetes network called the /pod network/
+    - Pod deployment is atomic, only once fully deployed will it start servicing requests
+    - Pods can be either short or long lived
+    - Pods are immutable objects. This means you can't modify them after they're deployed.
+    - When a failure occurs or an update is required the pod is simply discarded and replaced
+      
+**** Features
+***** Labels
+Let you group pods and associate them with other objects
+***** Annotations
+Add experimental features and integrations with third party tools
+***** Probes
+- test the status and health of pods
+- Enable advanced scheduling
+- updates
+***** Affinity & anti-affinity
+control where pods run
+***** Termination control
+Gracefully terminate pods and their contained applications
+
+*** Manifests fields
+
+**** spec.initContainers
+This block defines one or more containers that k8s guarantees will run and complete before main app container starts
+
+** Controllers
+ - Controllers enable features such as self-healing, scaling, updates & rollbacks
+ - Every controller has a PodTemplate which defines the pods it deploys & manages
+** Namespaces
+   - Divide a cluster into multiple virtual clusters
+   - Allow the application of quotas and policies to groups of objects
+   - Objects are said to be /namespaced/ (pods, services and deployments)
+   - Unless a namespace is explicitly defined for the target object it will be deployed to the default namespace
 * Config
 ** kubeconfig file
  - Usually found in '~/.kube/config'
@@ -123,6 +165,16 @@ There are three features an app must have to be run on a cluster:
   4. K8s records the config in the cluster store as part of the desired state.
   5. Any required work tasks are scheduled to cluster work nodes.
   6. Controllers run as background reconciliation loops monitoring the cluster state.
+* Useful Commands
+** Examining pods
+kubectl get pods
+kubectl describe pods
+kubectl logs // get the logs from a specific pod
+** Running commands in pods
+kubectl exec <pod> -- <command> // basically like docker exec, not the dual hyphen between pod and command
+
+If running a shell make sure you add the -it flags to make the session interactive and redirect STDIN and STDOUT to your shell respectively.
+
 * Examples
 ** kubeconfig file
   - A single cluster called shield, as single user called charlie, and a single context called director.
@@ -147,4 +199,19 @@ There are three features an app must have to be run on a cluster:
 	  name: director
       current-context: director
     #+end_src
-
+** pod
+#+begin_src yaml
+apiVersion: v1 # The schema version to use when creating the object
+kind: Pod # This tells k8s the type of object being defined, in this case, a pod.
+metadata:
+  name: hello-pod
+  labels:
+    zone: prod
+    version: v1
+spec: # This section defines the containers the pod will run and is called the pod template
+  containers:
+  - name: hello-ctr
+    image: nigelpoulton/k8sbook:latest
+    ports:
+    - containerPort: 8080
+#+end_src
