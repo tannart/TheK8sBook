@@ -38,6 +38,7 @@ The worker nodes and control plane nodes running the application(s)
  - Offers scalability, self-healing, and rolling updates for stateless apps
  - Defined in manifests
  - Enacted by posting to the API server as the _desired state_ of the application.
+ - User labels and selectors to find Pods they own
 ** Declarative Model
   1. Declare the desired state of an application microservice in a manifest
   2. post to API server
@@ -48,11 +49,71 @@ The worker nodes and control plane nodes running the application(s)
    - What an application should look like, as defined by the manifest
    - Includes images to use, replica numbers, network ports and how to update.
 ** Services
-  - Provide reliable networking for a set of pods
+  - Provide stable and reliable networking for a set of pods
   - Front-end consisting of a stable DNS-name, ip address and port.
   - Back-end load-balancing traffic across set of pods.
   - Updates routing as pods are created and destroyed automatically.
-* Technologies
+  - Determine Pods to send traffic to using lables and selectors
+  - For a Service to route to a Pod it must have every label the Service is selecting on
+  - *Selector* is the list of label the service uses to find destination pods
+  - *Port* is the port the service listens on inside the cluster
+  - *TargetPort* is the port the application listens on
+  - *NodePort* is the cluster-wide port which can be used for external access
+  - *Endpoint* is the list of Pod IPs whose labels are currently matching the selector
+*** Features
+    - Stable IP address
+    - Stable DNS name
+    - Stable Port
+*** Types
+**** ClusterIP
+     - The default type
+     - Stable Virtual IP only accessible from inside the cluster
+**** NodePort
+     - An extension of a ClusterIP, enables external access via a dedicated port on every cluster node.
+     - NodePorts only work with ports 30000-32767
+**** LoadBalancer
+     - Integrates with internet facing load balancers on your cloud platform providing high-performance, high-availability public IP or DNS.
+     - Only work on clouds that support them.
+** Endpoints
+Automatically created with every service, an Endpoints object is used to store a dynamic list of healthy Pods matching the Service's label selector
+** Ingress
+   - Allows exposing multiple Services through a single cloud load-balancer
+   - Creates a LoadBalancer Service on 80 or 443 and uses both host-based and path-based routing to send traffic to the correct backend service
+   - The traffic routing rules are defined by the object spec
+*** Classes
+    These are user-defined ingress types which can be used to created Ingress objects with a specific base ingress type and collection of metadata
+** kube-proxy
+   - Captures ClusterIP traffic and redirects it to the IP of Pods matching the Services label selector
+   - Pod-based Kubernetes-native app.
+   - Implements controller watching API server for new Services and Endpoints objects.
+   - Creates local IPVS rules telling the node to intercept Service ClusterIP traffic and forward it to Pod IPs 
+** Service Discovery
+Two major components:
+*** Registration
+    - Application posts its connection details to a /service registry/ so other apps can find it.
+    - Service registry is k8s internal DNS
+    - All K8s services automatically register their details with DNS
+    - Every pod in the cluster know where to find the cluster DNS (it is said to be /well-known/)
+    - Implemented in the kube-system namespace as a set of pods managed by a deployment called coredns and fronted by a service called kube-dns
+    - Internally based on CoreDNS and run as a /kubernetes-native/ application
+    - The name of an app used in the internal dns is taken from the metadata name attribute
+**** Registration Flow
+     1. Service manifest posted to API server
+     2. Service allocated Stable, internal ClusterIP
+     3. Endpoints created to hold a list of healthy pods matching Services selector
+     4. Pod network configured to handle traffic arriving at ClusterIP
+     5. Service Name and IP registered with cluster DNS
+*** Discovery
+    - Kubernetes populates each containers /etc/resolv.conf with the cluster DNS service and any search domains to be appended to unqualified names
+    - Every cluster has an address space partitioned by Namespaces
+    - The cluster domain is usually `cluster.local` and objects have unique names within it e.g. a service called ent would have a FQDN of ent.default.svc.cluster.local
+    - The domain format is <object-name>.<namespace>.svc.cluster.local
+    - Object can use just their short names to connect to namespace local Services but require FQDNs to connect across namespaces
+**** Inter-app communication
+     1. Know the name of the remote apps service
+     2. Name Resolution
+     3. Network routing
+* Technologies 
 ** containerd
 A stripped down version of the docker runtime with just the features required by kubernetes. The sandard docker runtime was deprecated for use with Kubernetes in 1.20
 ** Control Plane
@@ -142,6 +203,83 @@ This block defines one or more containers that k8s guarantees will run and compl
    - Allow the application of quotas and policies to groups of objects
    - Objects are said to be /namespaced/ (pods, services and deployments)
    - Unless a namespace is explicitly defined for the target object it will be deployed to the default namespace
+** Deployments
+   - Deploymnets rely heavily on objects called ReplicaSets
+   - Each Deployment object manages a single Pod template, however a single deployment _can_ manage multiple replicas of the same Pod.
+*** Deployment Theory
+     - Deployment is a /controller/ designed for stateless apps.
+**** Deployment spec
+YAML object describing the desired state of a stateless app
+**** Deployment controller
+This implements and manages the spec, it is highly-available and runs in the background constantly monitoring the app and reconciling the observed state with the desired state.
+
+*** Rolling Updates
+    - zero-downtime rolling updates are a key feature of deployments, however they require both loose coupling via aAPIs and backwards _and_ forwards compatibility
+    - All microservices in an app should be decoupled and only communicate through well-defined APIs
+    - Once a rollout is complete, the original ReplicaSet is wound down and no longer manages any pods, however it's configuration still exists on the cluster in case of a rollback.
+      
+*** spec
+    - No. of Pod replicas
+    - Images to use for Pods containers
+    - Ports to expose
+    - How to perform rolling updates
+
+** Service
+   - Allow access of apps from outside the cluster
+
+** ReplicaSets
+ - These represent an intermediate level between Deployments and Pods
+ - Replaces failed pods (self healing)
+ - Adds or removes pods depending on increased/decreased load (scaling)
+** Storage
+   - All types of storage are referred to as volumes when exposed on kubernetes
+   - Storage plugins are called provisioners in kubernetes
+     
+*** RetainPolicy
+    Tells K8s how to deal with a PV released by its PVC
+**** Delete
+     Removes not only the PV but also the associated storage resource on the external storage system
+**** Retain
+     Keep both the PV and the underlying storage resource
+
+*** Container Storage Interface (CSI)
+    - Standards-based storage interface providing uniform kubernetes access.
+
+*** Persistent Storage Subsystem
+**** PersistentVolumes (PV)
+     - Mapped to external storage assets
+**** PersistentVolumeClaims (PVC)
+     - Tickets authorising pods to use PVs
+**** StorageClasses (SC)
+     - Allow creation of PVs in response to PVCs
+     - Define different classes/tiers of storage e.g. fast-storage and slow-storage
+     - the `provisioner` field tells kubernetes which plugin to use
+     - Immutable
+     - metadata.name needs to be meaningful
+     - Plugin-specific values are given in the parameters block.
+     - Each storage class relates to only a single type of storage on a single backend
+***** Workflow
+      1. Get a storage backend
+      2. Create cluster
+      3. Install & configure the CSI storage plugin
+      4. Create one or more StorageClasses
+      5. Deploy Pods and PVCs referencing the above StorageClasses
+*** Access Modes
+**** ReadWriteOnce (RWO)
+     Defines a PV that can only be bound as RW by a single PVC.
+**** ReadWriteMany (RWM)
+     - Bindable as RW by multiple PVCs.
+     - Usually only supported by file and object storage such as NFS.
+**** ReadOnlyMany (ROM)
+** ConfigMap
+   - Used to store non-sensitive config information
+*** Examples:
+    - Environment variables
+    - Config files
+    - Hostnames
+    - Service ports
+    - Accounts names
+
 * Config
 ** kubeconfig file
  - Usually found in '~/.kube/config'
@@ -174,6 +312,17 @@ kubectl logs // get the logs from a specific pod
 kubectl exec <pod> -- <command> // basically like docker exec, not the dual hyphen between pod and command
 
 If running a shell make sure you add the -it flags to make the session interactive and redirect STDIN and STDOUT to your shell respectively.
+** Pause a rollout in progress
+kubectl rollout pause deploy <deployment-name>
+*** And restart it 
+kubectl rollout resume deploy <deployment-name>
+
+* Hierarchy
+ - Application - your app
+   - Containers - packages application and dependencies
+     - Pods - Enable kubernetes to run containers and co-scheduling etc.
+       - ReplicaSets - Manage Pods & enable self healing and scaling
+	 - Deployments - Manage ReplicaSets and add rollouts and rollbacks
 
 * Examples
 ** kubeconfig file
