@@ -113,6 +113,8 @@ Two major components:
      1. Know the name of the remote apps service
      2. Name Resolution
      3. Network routing
+** Kubernetes-native application
+   An application that is aware it's running on K8s and can talk to the k8s API
 * Technologies 
 ** containerd
 A stripped down version of the docker runtime with just the features required by kubernetes. The sandard docker runtime was deprecated for use with Kubernetes in 1.20
@@ -273,12 +275,20 @@ This implements and manages the spec, it is highly-available and runs in the bac
 **** ReadOnlyMany (ROM)
 ** ConfigMap
    - Used to store non-sensitive config information
+   - Structured as a dictionary of key/value pairs separated by colons entries
+   - values can range from single digits up to entire configuration files
+   - Data stored in configmaps can be injected into containers at runtime
+     
 *** Examples:
     - Environment variables
     - Config files
     - Hostnames
     - Service ports
     - Accounts names
+*** Injection methods
+    - Environment variables
+    - arguments to container startup commands
+    - files in a volume
 
 * Config
 ** kubeconfig file
