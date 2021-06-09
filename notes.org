@@ -278,6 +278,8 @@ This implements and manages the spec, it is highly-available and runs in the bac
    - Structured as a dictionary of key/value pairs separated by colons entries
    - values can range from single digits up to entire configuration files
    - Data stored in configmaps can be injected into containers at runtime
+   - Environment variables cannot be updated dynamically
+   - Using volumes allows configmap changes to be reflected in running containers
      
 *** Examples:
     - Environment variables
@@ -289,7 +291,23 @@ This implements and manages the spec, it is highly-available and runs in the bac
     - Environment variables
     - arguments to container startup commands
     - files in a volume
-
+** Secrets
+   - Configmaps but for sensitive data
+   - Secrets are not encrypted but instead obscured by being re-encoded as base-64
+   - Limited to 1MiB
+   - Every Pod gets a secret mounted as volume which is used tto authenticate with the api server
+   - Secret volumes are automatically mounted as read-only
+*** Workflow
+    1. Secret created and persisted to cluster store
+    2. Pod using secret scheduled to cluster node
+    3. secret transferred un-encrypted to node
+    4. Kubelet on node starts pod
+    5. Secret mounted into container via in-memory tempfs filesystem and decoded from base64
+    6. Application consumes secret
+    7. When Pod is deleted, secrete deleted from node
+** StatefulSets
+   - Controller similar to deployments
+   - Predictable and persistent Pod names, DNS hostnames and volume bindings form the 'state' of a Pod which is persisted across failures, scalinng and other scheduling operations.
 * Config
 ** kubeconfig file
  - Usually found in '~/.kube/config'
@@ -326,6 +344,11 @@ If running a shell make sure you add the -it flags to make the session interacti
 kubectl rollout pause deploy <deployment-name>
 *** And restart it 
 kubectl rollout resume deploy <deployment-name>
+** Editing existing configmaps
+   The below command opens the contents of the specified configmap using vi
+   #+begin_src sh
+   kubectl edit cm <configmap>
+   #+end_src
 
 * Hierarchy
  - Application - your app
