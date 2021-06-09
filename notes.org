@@ -308,6 +308,8 @@ This implements and manages the spec, it is highly-available and runs in the bac
 ** StatefulSets
    - Controller similar to deployments
    - Predictable and persistent Pod names, DNS hostnames and volume bindings form the 'state' of a Pod which is persisted across failures, scalinng and other scheduling operations.
+** API security
+
 * Config
 ** kubeconfig file
  - Usually found in '~/.kube/config'
